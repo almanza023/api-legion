@@ -181,3 +181,4 @@ Actualmente el proyecto casi no tiene cobertura automatizada en [tests](/Applica
 ## Licencia
 
 Proyecto de uso interno. Ajusta esta seccion si el repositorio va a distribuirse con una licencia formal.
+# api-legion
