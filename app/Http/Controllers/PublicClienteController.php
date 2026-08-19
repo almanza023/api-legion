@@ -54,7 +54,8 @@ public function updateSincronizado($id)
                 'sexo' => 'nullable|string|max:20',
                 'fecha_nacimiento' => 'nullable|date',
                 'fecha_inicial' => 'required|date',
-                'fecha_final' => 'required|date'
+                'fecha_final' => 'required|date',
+                'precio_pagado' => 'nullable'
             ]);
 
             if ($validator->fails()) {
@@ -76,13 +77,19 @@ public function updateSincronizado($id)
                 ], 400);
             }
             $membresia = Membresia::where('nombre', $request->membresia)->first();
-            if (!$membresia ) {
+            if (!$membresia) {
                 $membresia = Membresia::create([
                     'nombre' => strtoupper($request->membresia),
-                    'precio' => 0,
+                    'precio' => $request->precio_pagado ?? 0,
                     'duracion_dias' => 1,
                     'estado' => 'activo'
                 ]);
+            } else {    
+                if ($membresia->precio != $request->precio_pagado && $request->precio_pagado != null) {
+                    $membresia->update([
+                        'precio' => $request->precio_pagado
+                    ]);
+                }
             }
 
             $cliente = Cliente::where('numero_documento', $request->numero_documento)->first();
@@ -153,11 +160,12 @@ public function updateSincronizado($id)
                         'fecha_inicio' => $request->fecha_inicial,
                         'fecha_fin' => $request->fecha_final,
                         'estado' => 'activo',
-                        'precio_pagado' => $membresia->precio,
+                        'precio_pagado' => $request->precio_pagado,
                         'observaciones' => null
                     ]);
                 }
             }
+            
             
             DB::commit();
 
