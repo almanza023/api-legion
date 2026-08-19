@@ -14,18 +14,18 @@ class PreguntaEvaluacionController extends Controller
     public function index(Request $request)
     {
         try {
-            $perPage = $request->get('per_page', 50);
-            $activas = $request->get('activas', true);
+            $perPage = (int) $request->get('per_page', 50);
 
             $query = PreguntaEvaluacion::orderBy('orden', 'asc');
 
-            if ($activas) {
-                $query->where('activa', true);
+            if ($request->has('activas')) {
+                $query->where('activa', $request->boolean('activas'));
             }
 
             $preguntas = $query->paginate($perPage);
 
             return response()->json([
+                'status' => 'ok',
                 'data' => $preguntas->items(),
                 'current_page' => $preguntas->currentPage(),
                 'per_page' => $preguntas->perPage(),
@@ -48,12 +48,13 @@ class PreguntaEvaluacionController extends Controller
                 'titulo' => 'required|string|max:255',
                 'descripcion' => 'nullable|string',
                 'orden' => 'nullable|integer|min:0',
+                'activa' => 'nullable|boolean',
             ]);
 
             $pregunta = new PreguntaEvaluacion();
             $pregunta->titulo = $request->titulo;
             $pregunta->descripcion = $request->descripcion ?? null;
-            $pregunta->orden = $request->orden ?? PreguntaEvaluacion::max('orden') + 1;
+            $pregunta->orden = $request->orden ?? (PreguntaEvaluacion::max('orden') + 1);
             $pregunta->activa = $request->boolean('activa', true);
             $pregunta->save();
 
@@ -102,12 +103,13 @@ class PreguntaEvaluacionController extends Controller
                 return response()->json(['status' => 'fail', 'msg' => 'Pregunta no encontrada', 'data' => null], 404);
             }
 
-            $pregunta->update([
-                'titulo' => $request->titulo ?? $pregunta->titulo,
-                'descripcion' => $request->descripcion ?? $pregunta->descripcion,
-                'orden' => $request->orden ?? $pregunta->orden,
-                'activa' => $request->boolean('activa', $pregunta->activa),
-            ]);
+            $dataToUpdate = [];
+            if ($request->has('titulo')) $dataToUpdate['titulo'] = $request->titulo;
+            if ($request->has('descripcion')) $dataToUpdate['descripcion'] = $request->descripcion;
+            if ($request->has('orden')) $dataToUpdate['orden'] = $request->orden;
+            if ($request->has('activa')) $dataToUpdate['activa'] = $request->boolean('activa');
+
+            $pregunta->update($dataToUpdate);
 
             return response()->json(['status' => 'ok', 'msg' => 'Pregunta actualizada exitosamente', 'data' => $pregunta]);
         } catch (\Illuminate\Validation\ValidationException $ex) {

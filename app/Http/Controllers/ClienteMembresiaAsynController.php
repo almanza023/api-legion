@@ -15,25 +15,30 @@ class ClienteMembresiaAsynController extends Controller
     public function index(Request $request)
     {
         try {
-            $paginate = $request->get('paginate', false);
-            $perPage = $request->get('per_page', 12);
+            $query = ClienteMembresia::with(['cliente', 'membresia', 'user']);
+            $this->applyFilters($query, $request);
 
-            if ($paginate === 'true' || $paginate === true) {
-                $clienteMembresias = ClienteMembresia::with(['cliente', 'membresia', 'user'])
+            $paginate = $request->get('paginate', true);
+            $perPage = (int) $request->get('per_page', 12);
 
-
-                    ->paginate($perPage);
-                
+            if ($paginate === 'false' || $paginate === false) {
+                $clienteMembresias = $query->orderBy('created_at', 'desc')->get();
                 return response()->json([
+                    'status' => 'ok',
+                    'msg' => 'Operación exitosa',
+                    'data' => $clienteMembresias
+                ]);
+            } else {
+                $clienteMembresias = $query->orderBy('created_at', 'desc')->paginate($perPage);
+                return response()->json([
+                    'status' => 'ok',
+                    'msg' => 'Operación exitosa',
                     'data' => $clienteMembresias->items(),
                     'current_page' => $clienteMembresias->currentPage(),
                     'per_page' => $clienteMembresias->perPage(),
                     'total' => $clienteMembresias->total(),
                     'last_page' => $clienteMembresias->lastPage()
                 ]);
-            } else {
-                $clienteMembresias = ClienteMembresia::with(['cliente', 'membresia', 'user'])->get();
-                return response()->json(['status' => 'ok', 'msg' => 'Operación exitosa', 'data' => $clienteMembresias]);
             }
         } catch (\Exception $ex) {
             Log::error($ex->getMessage() . PHP_EOL . $ex->getTraceAsString());
@@ -164,9 +169,15 @@ class ClienteMembresiaAsynController extends Controller
     public function getActivas(){
         try {
             $hoy = Carbon::now()->format('Y-m-d');
-            $membresiasActivas = ClienteMembresia::with(['cliente', 'membresia'])
+            
+            // Actualizar en DB membresías cuya fecha fin ya pasó
+            ClienteMembresia::where('estado', 'activo')
+                ->whereDate('fecha_fin', '<', $hoy)
+                ->update(['estado' => 'vencido']);
+
+            $membresiasActivas = ClienteMembresia::with(['cliente', 'membresia', 'user'])
                 ->where('estado', 'activo')
-                ->where('fecha_fin', '>=', $hoy)
+                ->whereDate('fecha_fin', '>=', $hoy)
                 ->get();
             return response()->json(['status' => 'ok', 'msg' => 'Operación exitosa', 'data' => $membresiasActivas]);
         } catch (\Exception $ex) {
@@ -176,37 +187,28 @@ class ClienteMembresiaAsynController extends Controller
     }
 
     /**
-     * Filtrar membresías de clientes por cliente_id, estado y tipo de membresía
+     * Filtrar membresías de clientes por cliente_id, estado, tipo de membresía y búsqueda de texto
      * 
      * @param Request $request
      * @return \Illuminate\Http\JsonResponse
-     * 
-     * Parámetros opcionales:
-     * - cliente_id: ID del cliente
-     * - estado: Estado de la membresía (activo, inactivo, etc.)
-     * - membresia_id: ID del tipo de membresía
      */
     public function filtrar(Request $request){
         try {
-            $query = ClienteMembresia::with(['cliente', 'membresia']);
+            $query = ClienteMembresia::with(['cliente', 'membresia', 'user']);
+            $this->applyFilters($query, $request);
 
-            // Filtrar por cliente_id si se proporciona
-            if($request->has('cliente_id') && $request->cliente_id != null){
-                $query->where('cliente_id', $request->cliente_id);
+            $paginate = $request->get('paginate', true);
+            $perPage = (int) $request->get('per_page', 12);
+
+            if ($paginate === 'false' || $paginate === false) {
+                $membresias = $query->orderBy('created_at', 'desc')->get();
+                return response()->json([
+                    'status' => 'ok',
+                    'msg' => 'Operación exitosa',
+                    'data' => $membresias
+                ]);
             }
 
-            // Filtrar por estado si se proporciona
-            if($request->has('estado') && $request->estado != null){
-                $query->where('estado', $request->estado);
-            }
-
-            // Filtrar por tipo de membresía (membresia_id) si se proporciona
-            if($request->has('membresia_id') && $request->membresia_id != null){
-                $query->where('membresia_id', $request->membresia_id);
-            }
-
-            // Ordenar por fecha de creación descendente y paginar
-            $perPage = $request->get('per_page', 12);
             $membresias = $query->orderBy('created_at', 'desc')->paginate($perPage);
 
             return response()->json([
@@ -222,6 +224,82 @@ class ClienteMembresiaAsynController extends Controller
             Log::error($ex->getMessage() . PHP_EOL . $ex->getTraceAsString());
             return response()->json(['status' => 'fail', 'msg' => 'Ha ocurrido un error al procesar la solicitud', 'data' => $ex->getMessage()], 500);
         }
+    }
+
+    /**
+     * Método auxiliar privado para aplicar filtros dinámicos a la consulta de ClienteMembresia
+     */
+    private function applyFilters($query, Request $request)
+    {
+        $today = Carbon::today()->format('Y-m-d');
+
+        // Sincronizar automáticamente en la DB aquellas membresías con estado 'activo' cuya fecha fin ya venció
+        ClienteMembresia::where('estado', 'activo')
+            ->whereDate('fecha_fin', '<', $today)
+            ->update(['estado' => 'vencido']);
+
+        // 1. Filtrar por estado
+        if ($request->has('estado') && $request->estado !== null && $request->estado !== '') {
+            $estadoClean = strtolower(trim($request->estado));
+            if ($estadoClean !== 'todos' && $estadoClean !== 'all') {
+                if (in_array($estadoClean, ['activo', 'activa'])) {
+                    $query->where('estado', 'activo')
+                          ->whereDate('fecha_fin', '>=', $today);
+                } elseif (in_array($estadoClean, ['vencido', 'vencida', 'expired'])) {
+                    $query->where(function ($q) use ($today) {
+                        $q->whereIn('estado', ['vencido', 'vencida'])
+                          ->orWhere(function ($sub) use ($today) {
+                              $sub->where('estado', 'activo')
+                                  ->whereDate('fecha_fin', '<', $today);
+                          });
+                    });
+                } elseif (in_array($estadoClean, ['inactivo', 'inactiva'])) {
+                    $query->whereIn('estado', ['inactivo', 'inactiva']);
+                } elseif (in_array($estadoClean, ['cancelado', 'cancelada'])) {
+                    $query->whereIn('estado', ['cancelado', 'cancelada']);
+                } else {
+                    $query->where('estado', $request->estado);
+                }
+            }
+        }
+
+        // 2. Filtrar por cliente_id
+        if ($request->has('cliente_id') && $request->cliente_id !== null && $request->cliente_id !== '') {
+            $query->where('cliente_id', $request->cliente_id);
+        }
+
+        // 3. Filtrar por membresia_id
+        if ($request->has('membresia_id') && $request->membresia_id !== null && $request->membresia_id !== '') {
+            $query->where('membresia_id', $request->membresia_id);
+        }
+
+        // 4. Búsqueda por texto (search / buscar / q)
+        $search = trim($request->input('search') ?? $request->input('buscar') ?? $request->input('q') ?? '');
+        if ($search !== '') {
+            $query->where(function ($q) use ($search) {
+                $q->whereHas('cliente', function ($qCliente) use ($search) {
+                    $qCliente->where('nombre', 'like', "%{$search}%")
+                             ->orWhere('apellidos', 'like', "%{$search}%")
+                             ->orWhere('numero_documento', 'like', "%{$search}%")
+                             ->orWhere(DB::raw("CONCAT(COALESCE(nombre, ''), ' ', COALESCE(apellidos, ''))"), 'like', "%{$search}%");
+                })->orWhereHas('membresia', function ($qMembresia) use ($search) {
+                    $qMembresia->where('nombre', 'like', "%{$search}%");
+                });
+            });
+        }
+
+        // 5. Filtro por rango de fechas
+        $fechaInicio = $request->input('fecha_inicio') ?? $request->input('fecha_desde');
+        if ($fechaInicio) {
+            $query->whereDate('fecha_inicio', '>=', $fechaInicio);
+        }
+
+        $fechaFin = $request->input('fecha_fin') ?? $request->input('fecha_hasta');
+        if ($fechaFin) {
+            $query->whereDate('fecha_fin', '<=', $fechaFin);
+        }
+
+        return $query;
     }
 
     /**

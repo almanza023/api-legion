@@ -61,27 +61,18 @@ class RemisionMedicaPdfController extends Controller
     }
 
     /* =========================================================================
-       1. ENCABEZADO PRINCIPAL (MÉDICO & LOGO)
+       1. ENCABEZADO PRINCIPAL (MÉDICO & FECHA)
        ========================================================================= */
     private function generarEncabezado()
     {
         $startY = $this->pdf->GetY();
         $this->pdf->Rect(10, $startY, 196, 22);
 
-        // Divisiones: Left (40mm) | Center (116mm) | Right (40mm)
+        // Divisiones: Izquierda Espacio Vacío (40mm) | Centro Médico (116mm) | Derecha Fecha (40mm)
         $this->pdf->Line(50, $startY, 50, $startY + 22);
         $this->pdf->Line(166, $startY, 166, $startY + 22);
 
-        // Logo Izquierdo (Símbolo médico o logo empresa)
-        $logoPath = $this->getLogoPath();
-        if ($logoPath && file_exists($logoPath)) {
-            $this->pdf->Image($logoPath, 13, $startY + 2, 34, 18);
-        } else {
-            // Dibujar texto/icono si no hay logo
-            $this->pdf->SetXY(10, $startY + 7);
-            $this->pdf->SetFont('Arial', 'B', 12);
-            $this->pdf->Cell(40, 8, utf8_decode('MÉDICO'), 0, 0, 'C');
-        }
+        // El cuadro izquierdo (40mm) se deja totalmente blanco/vacío según instrucción.
 
         // Centro: Datos del médico tratante
         $nombreMedico = $this->medico ? $this->medico->nombre : 'DRA. SANDRA DONADO G';
@@ -235,35 +226,50 @@ class RemisionMedicaPdfController extends Controller
         $this->pdf->SetFont('Arial', '', 8);
         $this->pdf->Cell(20, 4, utf8_decode('Objetivo:'), 0, 1, 'L');
 
-        // Checkboxes de objetivos
+        // Renderizar únicamente los objetivos guardados en la base de datos
         $objetivosGuardados = is_array($this->remision->objetivos) ? $this->remision->objetivos : [];
+        $otroTexto = trim($this->remision->objetivo_otro ?? '');
 
-        $listaObjetivos = [
-            'Recuperación Funcional',
-            'Fortalecimiento muscular',
-            'Control de peso',
-            'Mejoramiento capacidad física',
-            'Prevencion de enfermedad',
-        ];
+        $objetivosAMostrar = [];
+        $otroProcesado = false;
 
-        $objY = $box3Y + 19;
-        foreach ($listaObjetivos as $objNombre) {
-            $checked = in_array($objNombre, $objetivosGuardados) ? '[X]' : '[  ]';
-            $this->pdf->SetXY(18, $objY);
-            $this->pdf->SetFont('Arial', '', 7.5);
-            $this->pdf->Cell(8, 4, $checked, 0, 0, 'C');
-            $this->pdf->Cell(60, 4, utf8_decode($objNombre), 0, 1, 'L');
-            $objY += 4.5;
+        foreach ($objetivosGuardados as $obj) {
+            $objStr = trim((string) $obj);
+            if ($objStr === '') {
+                continue;
+            }
+
+            if (strcasecmp($objStr, 'Otro') === 0) {
+                $otroProcesado = true;
+                if ($otroTexto !== '') {
+                    $objetivosAMostrar[] = "Otro: {$otroTexto}";
+                } else {
+                    $objetivosAMostrar[] = "Otro";
+                }
+            } else {
+                $objetivosAMostrar[] = $objStr;
+            }
         }
 
-        // Opción "Otro"
-        $otroTexto = $this->remision->objetivo_otro ?? '';
-        $checkedOtro = (!empty($otroTexto) || in_array('Otro', $objetivosGuardados)) ? '[X]' : '[  ]';
-        $this->pdf->SetXY(18, $objY);
-        $this->pdf->SetFont('Arial', '', 7.5);
-        $this->pdf->Cell(8, 4, $checkedOtro, 0, 0, 'C');
-        $this->pdf->Cell(12, 4, utf8_decode('Otro:'), 0, 0, 'L');
-        $this->pdf->Cell(48, 4, utf8_decode($otroTexto), 'B', 1, 'L');
+        if (!$otroProcesado && $otroTexto !== '') {
+            $objetivosAMostrar[] = "Otro: {$otroTexto}";
+        }
+
+        $objY = $box3Y + 19;
+        if (count($objetivosAMostrar) > 0) {
+            foreach ($objetivosAMostrar as $objNombre) {
+                $this->pdf->SetXY(18, $objY);
+                $this->pdf->SetFont('Arial', '', 7.5);
+                $this->pdf->Cell(7, 4, '[X]', 0, 0, 'C');
+                $this->pdf->SetXY(25, $objY);
+                $this->pdf->MultiCell(70, 4, utf8_decode($objNombre), 0, 'L');
+                $objY = max($objY + 4.5, $this->pdf->GetY() + 0.5);
+            }
+        } else {
+            $this->pdf->SetXY(18, $objY);
+            $this->pdf->SetFont('Arial', 'I', 7.5);
+            $this->pdf->Cell(68, 4, utf8_decode('Sin objetivos especificados'), 0, 1, 'L');
+        }
 
         /* ----------------------- COLUMNA DERECHA: 4. Restricciones y 5. Vigencia ----------------------- */
         $rightX = 10 + $leftW + $gap; // 10 + 88 + 3 = 101

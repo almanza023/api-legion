@@ -9,6 +9,9 @@ Route::apiResource('preguntas-evaluacion', PreguntaEvaluacionController::class);
 
 // Rutas para Respuestas de Preguntas
 Route::prefix('respuestas-preguntas')->group(function () {
+    // Listar todas las respuestas de todos los clientes
+    Route::get('/', [RespuestaPreguntaClienteController::class, 'index']);
+    
     // Guardar o actualizar una respuesta
     Route::post('guardar', [RespuestaPreguntaClienteController::class, 'guardarRespuesta']);
     

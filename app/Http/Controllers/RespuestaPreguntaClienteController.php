@@ -11,6 +11,62 @@ use Illuminate\Support\Facades\Log;
 class RespuestaPreguntaClienteController extends Controller
 {
     /**
+     * Listar todas las respuestas de todos los clientes (con filtros)
+     */
+    public function index(Request $request)
+    {
+        try {
+            $perPage = $request->get('per_page', 50);
+            $clienteId = $request->get('cliente_id');
+            $preguntaId = $request->get('pregunta_id');
+            $search = $request->get('search');
+            $respuesta = $request->get('respuesta');
+
+            $query = RespuestaPreguntaCliente::with(['cliente', 'pregunta'])
+                ->orderBy('created_at', 'desc');
+
+            // Filtrar por ID de cliente particular
+            if ($clienteId) {
+                $query->where('cliente_id', $clienteId);
+            }
+
+            // Búsqueda por nombre, apellido o documento del cliente
+            if ($search) {
+                $query->whereHas('cliente', function ($q) use ($search) {
+                    $q->where('nombre', 'like', "%{$search}%")
+                      ->orWhere('apellidos', 'like', "%{$search}%")
+                      ->orWhere('numero_documento', 'like', "%{$search}%");
+                });
+            }
+
+            // Filtrar por pregunta
+            if ($preguntaId) {
+                $query->where('pregunta_id', $preguntaId);
+            }
+
+            // Filtrar por valor de respuesta (1 / 0)
+            if ($respuesta !== null && $respuesta !== '') {
+                $query->where('respuesta', filter_var($respuesta, FILTER_VALIDATE_BOOLEAN));
+            }
+
+            $respuestas = $query->paginate($perPage);
+
+            return response()->json([
+                'status' => 'ok',
+                'msg' => 'Operación exitosa',
+                'data' => $respuestas->items(),
+                'current_page' => $respuestas->currentPage(),
+                'per_page' => $respuestas->perPage(),
+                'total' => $respuestas->total(),
+                'last_page' => $respuestas->lastPage()
+            ]);
+        } catch (\Exception $ex) {
+            Log::error($ex->getMessage() . PHP_EOL . $ex->getTraceAsString());
+            return response()->json(['status' => 'fail', 'msg' => 'Ha ocurrido un error al procesar la solicitud', 'data' => $ex->getMessage()], 500);
+        }
+    }
+
+    /**
      * Obtener respuestas de un cliente específico
      */
     public function obtenerPorCliente($clienteId, Request $request)

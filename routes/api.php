@@ -40,5 +40,6 @@ Route::middleware([IsUserAuth::class])->group(function () {
     require __DIR__ . '/modules/preguntas-evaluacion.php';
     require __DIR__ . '/modules/asistencia-cliente-async.php';
     require __DIR__ . '/modules/remision-medica-async.php';
+    require __DIR__ . '/modules/expediente-async.php';
 
 });

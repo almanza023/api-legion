@@ -42,6 +42,21 @@ class Cliente extends Model
         return $this->hasMany(RemisionMedica::class, 'cliente_id')->orderBy('fecha_registro', 'desc');
     }
 
+    public function valoraciones()
+    {
+        return $this->hasMany(Valoracion::class, 'cliente_id')->orderBy('fecha_registro', 'desc');
+    }
+
+    public function valoracionesV2()
+    {
+        return $this->hasMany(ValoracionV2::class, 'cliente_id')->orderBy('fecha_registro', 'desc');
+    }
+
+    public function respuestasPreguntas()
+    {
+        return $this->hasMany(RespuestaPreguntaCliente::class, 'cliente_id')->orderBy('fecha_respuesta', 'desc');
+    }
+
     /**
      * Verifica si el cliente tiene al menos una membresía activa vigente.
      */

@@ -42,4 +42,43 @@ class RemisionMedica extends Model
     {
         return $this->belongsTo(DiagnosticoCie10::class, 'cie10_id');
     }
+
+    /**
+     * Determina si la remisión médica se encuentra actualmente vigente.
+     */
+    public function esVigente(): bool
+    {
+        // 1. Si el estado es explícitamente vencida, inactiva o anulada
+        if ($this->estado && in_array(strtolower($this->estado), ['vencida', 'anulada', 'inactiva'])) {
+            return false;
+        }
+
+        if (!$this->fecha_registro) {
+            return true;
+        }
+
+        $fechaRegistro = \Carbon\Carbon::parse($this->fecha_registro)->startOfDay();
+        $hoy = \Carbon\Carbon::now()->startOfDay();
+
+        $vigenciaStr = strtolower(trim((string)$this->vigencia));
+
+        $meses = 0;
+        if (str_contains($vigenciaStr, '12') || str_contains($vigenciaStr, '1_ano') || str_contains($vigenciaStr, '1 año') || str_contains($vigenciaStr, '1 ano')) {
+            $meses = 12;
+        } elseif (str_contains($vigenciaStr, '6')) {
+            $meses = 6;
+        } elseif (str_contains($vigenciaStr, '3')) {
+            $meses = 3;
+        } elseif (str_contains($vigenciaStr, '1')) {
+            $meses = 1;
+        }
+
+        if ($meses > 0) {
+            $fechaVencimiento = $fechaRegistro->copy()->addMonths($meses);
+            return $hoy->lessThanOrEqualTo($fechaVencimiento);
+        }
+
+        // Si no es posible extraer meses específicos, nos guiamos por la propiedad estado
+        return !in_array(strtolower((string)$this->estado), ['vencida', 'anulada', 'inactiva']);
+    }
 }

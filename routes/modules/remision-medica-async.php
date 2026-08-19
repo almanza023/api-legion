@@ -37,6 +37,7 @@ Route::prefix('diagnosticos-cie10')->group(function () {
 Route::prefix('remisiones-medicas')->group(function () {
     Route::get('/', [RemisionMedicaController::class, 'index']);
     Route::post('/', [RemisionMedicaController::class, 'store']);
+    Route::get('/sin-remision-vigente', [RemisionMedicaController::class, 'clientesSinRemisionVigente']);
     Route::get('/cliente/{clienteId}', [RemisionMedicaController::class, 'historicoCliente']);
     Route::get('/medico/{medicoId}', [RemisionMedicaController::class, 'remisionesPorMedico']);
     Route::get('/{id}', [RemisionMedicaController::class, 'show']);

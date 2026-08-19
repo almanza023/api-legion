@@ -219,4 +219,106 @@ class RemisionMedicaController extends Controller
             'msg' => 'Remisión médica eliminada exitosamente'
         ]);
     }
+
+    /**
+     * Obtener listado de todos los clientes que NO tienen una remisión médica vigente.
+     * Muestra:
+     * - Clientes que NUNCA han tenido una remisión médica.
+     * - Clientes cuya remisión médica ya VENCIÓ (según su fecha de registro + vigencia o estado).
+     */
+    public function clientesSinRemisionVigente(Request $request)
+    {
+        try {
+            $queryStr = trim($request->get('q', ''));
+            $paginate = $request->get('paginate', false);
+            $perPage = (int) $request->get('per_page', 15);
+
+            // Obtener todos los clientes con sus remisiones médicas
+            $query = Cliente::with(['remisionesMedicas' => function ($q) {
+                $q->orderBy('fecha_registro', 'desc')->orderBy('id', 'desc');
+            }]);
+
+            if (!empty($queryStr)) {
+                $query->where(function ($q) use ($queryStr) {
+                    $q->where('nombre', 'LIKE', "%{$queryStr}%")
+                      ->orWhere('apellidos', 'LIKE', "%{$queryStr}%")
+                      ->orWhere('numero_documento', 'LIKE', "%{$queryStr}%")
+                      ->orWhere('correo', 'LIKE', "%{$queryStr}%")
+                      ->orWhere('telefono', 'LIKE', "%{$queryStr}%");
+                });
+            }
+
+            $todosClientes = $query->orderBy('nombre', 'asc')->get();
+
+            // Filtrar clientes sin remisión médica vigente
+            $clientesSinVigente = $todosClientes->filter(function ($cliente) {
+                $ultimaRemision = $cliente->remisionesMedicas->first();
+
+                // Si nunca ha tenido remisión médica, DEBE MOSTRARSE
+                if (!$ultimaRemision) {
+                    return true;
+                }
+
+                // Si la última remisión NO es vigente (venció o está inactiva), SÍ se debe mostrar
+                return !$ultimaRemision->esVigente();
+            })->values();
+
+            // Mapear datos para la respuesta
+            $mappedData = $clientesSinVigente->map(function ($cliente) {
+                $ultimaRemision = $cliente->remisionesMedicas->first();
+
+                return [
+                    'id' => $cliente->id,
+                    'nombre' => $cliente->nombre,
+                    'apellidos' => $cliente->apellidos,
+                    'nombre_completo' => trim(($cliente->nombre ?? '') . ' ' . ($cliente->apellidos ?? '')),
+                    'tipo_documento' => $cliente->tipo_documento,
+                    'numero_documento' => $cliente->numero_documento,
+                    'sexo' => $cliente->sexo,
+                    'telefono' => $cliente->telefono,
+                    'correo' => $cliente->correo,
+                    'tiene_remisiones_previas' => $cliente->remisionesMedicas->count() > 0,
+                    'total_remisiones_previas' => $cliente->remisionesMedicas->count(),
+                    'ultima_remision' => $ultimaRemision ? [
+                        'id' => $ultimaRemision->id,
+                        'fecha_registro' => $ultimaRemision->fecha_registro ? $ultimaRemision->fecha_registro->format('Y-m-d') : null,
+                        'vigencia' => $ultimaRemision->vigencia,
+                        'estado' => $ultimaRemision->estado,
+                        'diagnostico' => $ultimaRemision->diagnostico
+                    ] : null,
+                    'motivo' => $ultimaRemision ? 'Remisión médica anterior vencida o inactiva' : 'Nunca ha tenido remisión médica'
+                ];
+            });
+
+            if ($paginate === 'true' || $paginate === true) {
+                $page = (int) $request->get('page', 1);
+                $slice = $mappedData->slice(($page - 1) * $perPage, $perPage)->values();
+                $lastPage = (int) ceil($mappedData->count() / $perPage);
+
+                return response()->json([
+                    'status' => 'success',
+                    'data' => $slice,
+                    'pagination' => [
+                        'current_page' => $page,
+                        'per_page' => $perPage,
+                        'total' => $mappedData->count(),
+                        'last_page' => max($lastPage, 1)
+                    ]
+                ]);
+            }
+
+            return response()->json([
+                'status' => 'success',
+                'msg' => 'Clientes sin remisión médica vigente obtenidos exitosamente',
+                'total' => $mappedData->count(),
+                'data' => $mappedData
+            ]);
+        } catch (\Exception $ex) {
+            \Illuminate\Support\Facades\Log::error("Error en clientesSinRemisionVigente: " . $ex->getMessage() . PHP_EOL . $ex->getTraceAsString());
+            return response()->json([
+                'status' => 'fail',
+                'msg' => 'Error al consultar clientes sin remisión médica vigente'
+            ], 500);
+        }
+    }
 }
