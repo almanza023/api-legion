@@ -141,9 +141,12 @@ class RemisionMedicaPdfController extends Controller
         $aa = $fechaNac ? date('y', strtotime($fechaNac)) : '';
         $edad = $this->calcularEdad($fechaNac);
 
-        $sexo = strtolower($this->cliente->sexo ?? '');
-        $isMujer = (str_contains($sexo, 'f') || str_contains($sexo, 'muj')) ? '[X]' : '[  ]';
-        $isHombre = (str_contains($sexo, 'm') || str_contains($sexo, 'hom')) ? '[X]' : '[  ]';
+        $sexo = strtolower(trim($this->cliente->sexo ?? ''));
+        $esMujer = in_array($sexo, ['f', 'femenino', 'mujer']) || str_starts_with($sexo, 'fem') || str_starts_with($sexo, 'muj');
+        $esHombre = in_array($sexo, ['m', 'h', 'masculino', 'hombre']) || str_starts_with($sexo, 'masc') || str_starts_with($sexo, 'hom');
+
+        $isMujer = $esMujer ? '[X]' : '[  ]';
+        $isHombre = (!$esMujer && $esHombre) ? '[X]' : '[  ]';
 
         $this->pdf->Cell(35, 6, utf8_decode('Fecha de nacimiento:'), 'L|T|B', 0, 'L');
 
@@ -284,16 +287,11 @@ class RemisionMedicaPdfController extends Controller
         $box4H = 43;
         $this->pdf->Rect($rightX, $box4Y, $rightW, $box4H);
 
-        // Renglones de restricciones
+        // Texto de restricciones tal como está en la base de datos
         $restriccionesTexto = $this->remision->restricciones ?? '';
         $this->pdf->SetXY($rightX + 2, $box4Y + 2);
         $this->pdf->SetFont('Arial', '', 8);
         $this->pdf->MultiCell($rightW - 4, 4.5, utf8_decode($restriccionesTexto), 0, 'L');
-
-        // Dibujar líneas horizontales de fondo estilo formato médico
-        for ($lineY = $box4Y + 6; $lineY < $box4Y + $box4H; $lineY += 5.5) {
-            $this->pdf->Line($rightX + 2, $lineY, $rightX + $rightW - 2, $lineY);
-        }
 
         // 5. Vigencia de la remisión
         $vigenciaY = $box4Y + $box4H + 2;

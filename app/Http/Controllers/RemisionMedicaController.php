@@ -126,13 +126,13 @@ class RemisionMedicaController extends Controller
         ]);
 
         // Verificar que el cliente tenga una membresía activa vigente
-        $cliente = Cliente::find($validated['cliente_id']);
-        if (!$cliente || !$cliente->tieneMembresiaActiva()) {
-            return response()->json([
-                'status' => 'fail',
-                'msg' => 'No es posible registrar la remisión médica. El cliente no cuenta con una membresía activa.'
-            ], 422);
-        }
+        // $cliente = Cliente::find($validated['cliente_id']);
+        // if (!$cliente || !$cliente->tieneMembresiaActiva()) {
+        //     return response()->json([
+        //         'status' => 'fail',
+        //         'msg' => 'No es posible registrar la remisión médica. El cliente no cuenta con una membresía activa.'
+        //     ], 422);
+        // }
 
         if (empty($validated['fecha_registro'])) {
             $validated['fecha_registro'] = now()->format('Y-m-d');
